@@ -26,7 +26,7 @@ growhub-games/
       "subtitle": "Auto Fish",
       "placeIds": [8356562067],
       "script": "indovoice/auto_fish.lua",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "icon": "fish"
     }
   ]
@@ -60,6 +60,42 @@ getgenv().GrowGame = {
 
 The hub calls `Stop()` on the previous game before loading another one.
 The script should start itself on load — the hub does not call `Start()`.
+
+## Game UI contract (optional)
+
+Add a `UI` function and the hub mounts it as its own sub-tab inside the Games tab:
+
+```lua
+getgenv().GrowGame = {
+    Id = "mygame_feature",
+    Name = "My Game",
+    Version = "1.1.0",
+    UI = function(parent, ctx)
+        -- build the panel inside `parent`
+    end,
+    Stop = function() end,
+}
+```
+
+The hub calls `UI(parent, ctx)` after the chunk runs, adds a sub-tab named after
+`GrowGame.Name`, and switches to it. `parent` is a full-size `Frame` inside the
+Games tab. When the game is stopped or another game is loaded, the hub destroys
+`parent` and removes the sub-tab.
+
+`ctx` fields:
+
+| field | meaning |
+|---|---|
+| `Theme` | GrowHub theme table (`TEXT_MAIN`, `TEXT_MUTED`, `CARD_BG`, `WIN_BG`, `NEON_GREEN`, `ACCENT_RED`, `BORDER_DIM`) |
+| `setFont(obj, weight)` | applies the hub's Montserrat face (`"Medium"`, `"SemiBold"`, `"Bold"`) |
+| `corner(obj, radius)` | adds a `UICorner` |
+| `addStroke(obj, color, thickness, transparency)` | adds a `UIStroke` |
+| `notify(text, icon)` | hub toast notification |
+| `hub` | the GrowHub state table |
+| `game` | the manifest entry being loaded |
+| `panel` | same frame as `parent` |
+
+A game without `UI` loads normally and shows no sub-tab.
 
 Minimum template:
 
