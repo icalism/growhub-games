@@ -540,8 +540,8 @@ local function ensureLoop()
             end
             task.wait(1.5)
         end
-        S.loopRunning = false
         if S.generation == GEN then
+            S.loopRunning = false
             log("loop stopped")
         end
     end)
@@ -1065,7 +1065,7 @@ end
 getgenv().GrowGame = {
     Id = "indovoice_autofish",
     Name = "Indo Voice",
-    Version = "1.1.1",
+    Version = "1.1.2",
     UI = buildUI,
     Stop = function()
         local st = getgenv()._fishAuto

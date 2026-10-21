@@ -26,7 +26,7 @@ growhub-games/
       "subtitle": "Auto Fish",
       "placeIds": [8356562067],
       "script": "indovoice/auto_fish.lua",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "icon": "fish"
     }
   ]
