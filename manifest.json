@@ -1,0 +1,15 @@
+﻿{
+  "name": "GrowHub Games",
+  "updated": "2026-10-21",
+  "games": [
+    {
+      "id": "indovoice",
+      "name": "Indo Voice",
+      "subtitle": "Auto Fish",
+      "placeIds": [8356562067],
+      "script": "indovoice/auto_fish.lua",
+      "version": "1.0.0",
+      "icon": "fish"
+    }
+  ]
+}
