@@ -40,7 +40,7 @@ growhub-games/
 | `subtitle` | small text under the name |
 | `placeIds` | Roblox place ids where this script is relevant |
 | `script` | path relative to the repo root |
-| `version` | bump it to bust the raw cache (`?v=version`) |
+| `version` | shown by the hub; informational only |
 | `icon` | lucide icon name (optional, not used yet) |
 
 ## Script contract
@@ -118,29 +118,28 @@ getgenv().GrowGame = {
 
 ## Hosting
 
-This repo is live at `icalism/growhub-games` (public). Raw base:
+This repo is live at `icalism/growhub-games` (public).
+
+GrowHub resolves the latest commit first:
 
 ```
-https://github.com/icalism/growhub-games/raw/refs/heads/main/
+https://api.github.com/repos/icalism/growhub-games/commits/main
 ```
 
-This redirects to raw.githubusercontent.com on the `refs/heads/main` path, which
-does not serve the stale cache that the plain `/main/` path sometimes returns.
-
-GrowHub's `Games.base` already points there. Verify:
+then fetches the manifest and every script from that commit:
 
 ```
-https://raw.githubusercontent.com/icalism/growhub-games/main/manifest.json
-https://raw.githubusercontent.com/icalism/growhub-games/main/indovoice/auto_fish.lua
+https://raw.githubusercontent.com/icalism/growhub-games/<commit>/manifest.json
+https://raw.githubusercontent.com/icalism/growhub-games/<commit>/indovoice/auto_fish.lua
 ```
 
-If you fork or rename the repo, change `Games.base` in GrowHub's Games tab.
+Commit paths are immutable, so the raw CDN cannot serve an old file after a push.
+`Games.repo` and `Games.branch` in GrowHub's Games tab select the source.
 
 ## Updating a script
 
 1. Edit the file on GitHub (or push).
-2. Bump `version` in `manifest.json` so `?v=` changes and the cache is bypassed.
-3. In GrowHub press **REFRESH**, then **LOAD** again.
+2. In GrowHub press **REFRESH** (re-resolves the commit), then **LOAD** again.
 
 ## Adding a game
 
