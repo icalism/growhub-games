@@ -51,9 +51,15 @@ if type(S.features) ~= "table" then
         noClip = false,
         speed = false,
         speedValue = 22,
+        checkMode = "off",
+        instantValue = 100,
     }
 end
 local F = S.features
+if F.checkMode == nil then
+    F.checkMode = F.instaCheck and "perfect" or "off"
+end
+F.instaCheck = F.checkMode ~= "off"
 
 local function log(...)
     local parts = {}
@@ -236,22 +242,51 @@ local function equipDagger()
     end
 end
 
--- insta skillchecks
+-- insta skillchecks (mode: off / perfect / instant)
+
+local function checkMode()
+    local m = F.checkMode
+    if m == nil then
+        m = F.instaCheck and "perfect" or "off"
+    end
+    return m
+end
 
 if GenSkillCheckEvent and GenSkillCheckResult then
     mkConn(GenSkillCheckEvent.OnClientEvent:Connect(function(token, genPoint)
-        if not alive or not F.instaCheck then
+        if not alive then
             return
         end
+        local mode = checkMode()
+        if mode == "off" then
+            return
+        end
+        local val = 1
+        if mode == "instant" then
+            val = tonumber(F.instantValue) or 100
+        end
+        local gen = genPoint and genPoint.Parent
+        local before = gen and gen:GetAttribute("RepairProgress")
         pcall(function()
-            GenSkillCheckResult:FireServer("success", 1, token, genPoint)
+            GenSkillCheckResult:FireServer("success", val, token, genPoint)
         end)
+        if mode == "instant" and gen then
+            S.instantTries = (S.instantTries or 0) + 1
+            if S.instantTries <= 10 then
+                task.delay(1.2, function()
+                    pcall(function()
+                        local after = gen:GetAttribute("RepairProgress")
+                        log(string.format("instant: fired %s, progress %s -> %s", tostring(val), tostring(before), tostring(after)))
+                    end)
+                end)
+            end
+        end
     end))
 end
 
 if HealSkillCheckEvent and HealSkillCheckResult then
     mkConn(HealSkillCheckEvent.OnClientEvent:Connect(function(token)
-        if not alive or not F.instaCheck then
+        if not alive or checkMode() == "off" then
             return
         end
         pcall(function()
@@ -899,6 +934,96 @@ local function buildUI(parent, ctx)
         return t
     end
 
+    local function makeDropdown(card, y, label, key, options)
+        local row = Instance.new("TextButton")
+        row.Text = ""
+        row.AutoButtonColor = false
+        row.BackgroundTransparency = 1
+        row.Position = UDim2.fromOffset(10, y)
+        row.Size = UDim2.new(1, -20, 0, 24)
+        row.ZIndex = 108
+        row.Parent = card
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Text = label
+        setFont(lbl, "Medium")
+        lbl.TextSize = 11
+        lbl.TextColor3 = Theme.TEXT_MAIN
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.BackgroundTransparency = 1
+        lbl.Size = UDim2.new(1, -110, 1, 0)
+        lbl.ZIndex = 108
+        lbl.Parent = row
+
+        local pill = Instance.new("TextButton")
+        pill.AutoButtonColor = false
+        setFont(pill, "Bold")
+        pill.TextSize = 10
+        pill.Size = UDim2.fromOffset(96, 18)
+        pill.Position = UDim2.new(1, -96, 0.5, -9)
+        pill.ZIndex = 109
+        pill.Parent = row
+        corner(pill, UDim.new(1, 0))
+
+        local menu
+        local function closeMenu()
+            if menu then
+                menu:Destroy()
+                menu = nil
+            end
+        end
+
+        local function refresh()
+            local cur = F[key]
+            local on = cur ~= nil and cur ~= "off"
+            pill.Text = tostring(cur or "off")
+            pill.BackgroundColor3 = on and Theme.NEON_GREEN or Theme.BORDER_DIM
+            pill.TextColor3 = on and Color3.fromRGB(8, 14, 11) or Theme.TEXT_MUTED
+        end
+
+        local function openMenu()
+            if menu then
+                closeMenu()
+                return
+            end
+            menu = Instance.new("Frame")
+            menu.BackgroundColor3 = Theme.CARD_BG
+            menu.Position = UDim2.new(1, -120, 0, 22)
+            menu.Size = UDim2.fromOffset(120, #options * 20 + 4)
+            menu.ZIndex = 120
+            menu.Parent = row
+            corner(menu, UDim.new(0, 8))
+            addStroke(menu, Theme.BORDER_DIM, 1, 0.15)
+            for i, opt in ipairs(options) do
+                local ob = Instance.new("TextButton")
+                ob.Text = tostring(opt)
+                ob.AutoButtonColor = false
+                setFont(ob, "Bold")
+                ob.TextSize = 10
+                ob.TextColor3 = (F[key] == opt) and Theme.NEON_GREEN or Theme.TEXT_MAIN
+                ob.BackgroundTransparency = (F[key] == opt) and 0.75 or 1
+                ob.Position = UDim2.fromOffset(2, 2 + (i - 1) * 20)
+                ob.Size = UDim2.new(1, -4, 0, 20)
+                ob.ZIndex = 121
+                ob.Parent = menu
+                corner(ob, UDim.new(0, 6))
+                ob.MouseButton1Click:Connect(function()
+                    F[key] = opt
+                    if key == "checkMode" then
+                        F.instaCheck = (opt ~= "off")
+                    end
+                    refresh()
+                    closeMenu()
+                end)
+            end
+        end
+
+        row.MouseButton1Click:Connect(openMenu)
+        pill.MouseButton1Click:Connect(openMenu)
+        refresh()
+        return refresh
+    end
+
     local function makeToggle(card, y, label, key)
         local row = Instance.new("TextButton")
         row.Text = ""
@@ -1021,8 +1146,10 @@ local function buildUI(parent, ctx)
     cardTitle(left, "SURVIVOR AUTOMATION", 10)
     local y = 32
     local rowStep = 27
+    local refreshers = {}
+    refreshers[#refreshers + 1] = makeDropdown(left, y, "Skillcheck Mode", "checkMode", { "off", "perfect", "instant" })
+    y = y + rowStep
     local toggles = {
-        { "Insta Skillcheck", "instaCheck" },
         { "Auto Parry", "autoParry" },
         { "Parry Equip Assist", "parryEquip" },
         { "Auto Repair", "autoRepair" },
@@ -1033,7 +1160,6 @@ local function buildUI(parent, ctx)
         { "Auto Escape (gate)", "autoEscape" },
         { "Auto Pallet Drop", "autoPalletDrop" },
     }
-    local refreshers = {}
     for _, t in ipairs(toggles) do
         refreshers[#refreshers + 1] = makeToggle(left, y, t[1], t[2])
         y = y + rowStep
@@ -1098,7 +1224,7 @@ end
 getgenv().GrowGame = {
     Id = "violencedistrict",
     Name = "Violence District",
-    Version = "1.0.0",
+    Version = "1.0.1",
     UI = buildUI,
     Stop = function()
         pcall(shutdown)

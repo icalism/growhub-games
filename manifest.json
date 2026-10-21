@@ -14,10 +14,10 @@
     {
       "id": "violencedistrict",
       "name": "Violence District",
-      "subtitle": "Auto Parry · Insta Checks · ESP",
+      "subtitle": "Skillcheck Modes · Auto Parry · ESP",
       "placeIds": [93978595733734],
       "script": "violencedistrict/vd.lua",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "icon": "sword"
     }
   ]
