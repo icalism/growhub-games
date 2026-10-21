@@ -405,6 +405,20 @@ end
 
 -- heal state
 
+local function startHealUI()
+    local char = getChar()
+    local ci = char and char:FindFirstChild("CheckInterractable")
+    if ci then pcall(function() ci:SetAttribute("isHealing", true) end) end
+    local f = getProgressFrame()
+    if f then pcall(function() f.Visible = true end) end
+end
+
+local function stopHealUI()
+    local char = getChar()
+    local ci = char and char:FindFirstChild("CheckInterractable")
+    if ci then pcall(function() ci:SetAttribute("isHealing", false) end) end
+end
+
 local function stopHeal()
     if S.healPoint and HealEvent then
         pcall(function()
@@ -412,6 +426,7 @@ local function stopHeal()
         end)
     end
     S.healPoint = nil
+    stopHealUI()
 end
 
 -- escape state
@@ -591,6 +606,7 @@ task.spawn(function()
                     if hum.Health <= hum.MaxHealth * 0.5 and root.AssemblyLinearVelocity.Magnitude < 2 then
                         S.healPoint = root
                         HealEvent:FireServer(root, true)
+                        startHealUI()
                     elseif F.healOthers then
                         local best, bestD = nil, 6
                         for _, p in ipairs(Players:GetPlayers()) do
@@ -610,8 +626,13 @@ task.spawn(function()
                         if best then
                             S.healPoint = best
                             HealEvent:FireServer(best, true)
+                            startHealUI()
                         end
                     end
+                end
+                -- keep heal UI flags alive while healing
+                if S.healPoint then
+                    startHealUI()
                 end
             else
                 if S.healPoint then
@@ -812,6 +833,7 @@ end
 
 table.insert(S.teardowns, fbRestore)
 table.insert(S.teardowns, stopRepairUI)
+table.insert(S.teardowns, stopHealUI)
 
 task.spawn(function()
     while alive and S.generation == GEN do
@@ -1071,7 +1093,7 @@ end
 getgenv().GrowGame = {
     Id = "violencedistrict",
     Name = "Violence District",
-    Version = "1.4.1",
+    Version = "1.5.0",
     UI = buildUI,
     Stop = function()
         pcall(shutdown)
