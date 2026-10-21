@@ -902,23 +902,36 @@ local function buildUI(parent, ctx)
             return
         end
         S.flagBusy = true
+        local requested = code
         local ok = pcall(function()
-            ev:FireServer(code)
+            ev:FireServer(requested)
         end)
         if ok then
-            S.flagCode = code
+            S.flagCode = requested
             updatePreview()
             if renderFlags then
                 renderFlags(search.Text)
             end
-            local item = byCode[code]
-            notify("Flag: " .. (item and item.name or code), "flag")
+            local item = byCode[requested]
+            notify("Flag: " .. (item and item.name or requested), "flag")
+            task.delay(1.5, function()
+                local actual = detectFlagCode()
+                if actual and actual ~= requested then
+                    S.flagCode = actual
+                    pcall(updatePreview)
+                    if renderFlags then pcall(renderFlags, search.Text) end
+                    notify("Flag change was rate-limited, try again", "alert-triangle")
+                end
+            end)
+            task.delay(2.1, function()
+                S.flagBusy = false
+            end)
         else
             notify("flag change failed", "alert-triangle")
+            task.delay(0.5, function()
+                S.flagBusy = false
+            end)
         end
-        task.delay(0.7, function()
-            S.flagBusy = false
-        end)
     end
 
     renderFlags = function(filter)
@@ -1052,7 +1065,7 @@ end
 getgenv().GrowGame = {
     Id = "indovoice_autofish",
     Name = "Indo Voice",
-    Version = "1.1.0",
+    Version = "1.1.1",
     UI = buildUI,
     Stop = function()
         local st = getgenv()._fishAuto
