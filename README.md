@@ -121,8 +121,11 @@ getgenv().GrowGame = {
 This repo is live at `icalism/growhub-games` (public). Raw base:
 
 ```
-https://raw.githubusercontent.com/icalism/growhub-games/main/
+https://github.com/icalism/growhub-games/raw/refs/heads/main/
 ```
+
+This redirects to raw.githubusercontent.com on the `refs/heads/main` path, which
+does not serve the stale cache that the plain `/main/` path sometimes returns.
 
 GrowHub's `Games.base` already points there. Verify:
 
