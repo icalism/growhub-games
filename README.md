@@ -26,7 +26,7 @@ growhub-games/
       "subtitle": "Auto Fish",
       "placeIds": [8356562067],
       "script": "indovoice/auto_fish.lua",
-      "version": "1.1.2",
+      "version": "1.0.0",
       "icon": "fish"
     }
   ]
@@ -40,7 +40,7 @@ growhub-games/
 | `subtitle` | small text under the name |
 | `placeIds` | Roblox place ids where this script is relevant |
 | `script` | path relative to the repo root |
-| `version` | shown by the hub; informational only |
+| `version` | bump it to bust the raw cache (`?v=version`) |
 | `icon` | lucide icon name (optional, not used yet) |
 
 ## Script contract
@@ -58,44 +58,26 @@ getgenv().GrowGame = {
 }
 ```
 
-The hub calls `Stop()` on the previous game before loading another one.
-The script should start itself on load — the hub does not call `Start()`.
-
-## Game UI contract (optional)
-
-Add a `UI` function and the hub mounts it as its own sub-tab inside the Games tab:
+Optional `UI = function(parent, ctx)` mounts a panel in the Games tab. Build it with
+`ctx.ui` (GrowHub's own components) so it looks like the rest of the hub:
 
 ```lua
-getgenv().GrowGame = {
-    Id = "mygame_feature",
-    Name = "My Game",
-    Version = "1.1.0",
-    UI = function(parent, ctx)
-        -- build the panel inside `parent`
-    end,
-    Stop = function() end,
-}
+UI = function(parent, ctx)
+    local ui = ctx.ui
+    local left, right = ui.columns()                         -- 2 scrolling columns
+    local sec = ui.section(left, "zap", "MY SECTION")        -- lucide icon + title, auto height
+    local setOn = ui.toggle(sec, "Feature", false, function(v) end)   -- setOn(v, silent)
+    ui.slider(sec, "Range", 8, 24, 16, " st", function(v) end)
+    ui.select(sec, "Mode", { "Off", "On" }, getFn, setFn)
+    local setStat = ui.stat(sec, "heart", "Health")          -- setStat(text, color?)
+    local box = ui.block(sec, 120)                           -- empty frame for custom content
+end,
 ```
 
-The hub calls `UI(parent, ctx)` after the chunk runs, adds a sub-tab named after
-`GrowGame.Name`, and switches to it. `parent` is a full-size `Frame` inside the
-Games tab. When the game is stopped or another game is loaded, the hub destroys
-`parent` and removes the sub-tab.
+`ctx` also has `Theme`, `setFont`, `corner`, `addStroke`, `tween`, `setLucide`, `notify`.
 
-`ctx` fields:
-
-| field | meaning |
-|---|---|
-| `Theme` | GrowHub theme table (`TEXT_MAIN`, `TEXT_MUTED`, `CARD_BG`, `WIN_BG`, `NEON_GREEN`, `ACCENT_RED`, `BORDER_DIM`) |
-| `setFont(obj, weight)` | applies the hub's Montserrat face (`"Medium"`, `"SemiBold"`, `"Bold"`) |
-| `corner(obj, radius)` | adds a `UICorner` |
-| `addStroke(obj, color, thickness, transparency)` | adds a `UIStroke` |
-| `notify(text, icon)` | hub toast notification |
-| `hub` | the GrowHub state table |
-| `game` | the manifest entry being loaded |
-| `panel` | same frame as `parent` |
-
-A game without `UI` loads normally and shows no sub-tab.
+The hub calls `Stop()` on the previous game before loading another one.
+The script should start itself on load — the hub does not call `Start()`.
 
 Minimum template:
 
@@ -118,28 +100,26 @@ getgenv().GrowGame = {
 
 ## Hosting
 
-This repo is live at `icalism/growhub-games` (public).
-
-GrowHub resolves the latest commit first:
+This repo is live at `icalism/growhub-games` (public). Raw base:
 
 ```
-https://api.github.com/repos/icalism/growhub-games/commits/main
+https://raw.githubusercontent.com/icalism/growhub-games/main/
 ```
 
-then fetches the manifest and every script from that commit:
+GrowHub's `Games.base` already points there. Verify:
 
 ```
-https://raw.githubusercontent.com/icalism/growhub-games/<commit>/manifest.json
-https://raw.githubusercontent.com/icalism/growhub-games/<commit>/indovoice/auto_fish.lua
+https://raw.githubusercontent.com/icalism/growhub-games/main/manifest.json
+https://raw.githubusercontent.com/icalism/growhub-games/main/indovoice/auto_fish.lua
 ```
 
-Commit paths are immutable, so the raw CDN cannot serve an old file after a push.
-`Games.repo` and `Games.branch` in GrowHub's Games tab select the source.
+If you fork or rename the repo, change `Games.base` in GrowHub's Games tab.
 
 ## Updating a script
 
 1. Edit the file on GitHub (or push).
-2. In GrowHub press **REFRESH** (re-resolves the commit), then **LOAD** again.
+2. Bump `version` in `manifest.json` so `?v=` changes and the cache is bypassed.
+3. In GrowHub press **REFRESH**, then **LOAD** again.
 
 ## Adding a game
 

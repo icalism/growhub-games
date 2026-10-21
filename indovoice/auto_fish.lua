@@ -572,40 +572,26 @@ log("=== fish_auto loaded ===")
 ensureLoop()
 
 -- GrowHub contract: UI(parent, ctx) mounts the game panel inside the Games tab.
+-- komponen dari ctx.ui (kit GrowHub) supaya tampilan sama dengan tab lain.
 local function buildUI(parent, ctx)
     ctx = ctx or {}
-    local Theme = ctx.Theme or {
-        TEXT_MAIN = Color3.fromRGB(240, 242, 245),
-        TEXT_MUTED = Color3.fromRGB(137, 143, 153),
-        CARD_BG = Color3.fromRGB(27, 28, 34),
-        WIN_BG = Color3.fromRGB(16, 17, 21),
-        NEON_GREEN = Color3.fromRGB(158, 255, 74),
-        ACCENT_RED = Color3.fromRGB(255, 92, 102),
-        BORDER_DIM = Color3.fromRGB(39, 41, 49),
-    }
-    local setFont = ctx.setFont or function(obj, weight)
-        obj.Font = (weight == "Bold" and Enum.Font.GothamBold) or (weight == "SemiBold" and Enum.Font.GothamSemibold) or Enum.Font.Gotham
+    local ui = ctx.ui
+    if not ui then
+        local l = Instance.new("TextLabel")
+        l.Text = "Update GrowHub to use this panel (F8 still toggles auto fish)."
+        l.TextColor3 = Color3.fromRGB(137, 143, 153)
+        l.BackgroundTransparency = 1
+        l.Size = UDim2.new(1, 0, 0, 24)
+        l.Parent = parent
+        return
     end
-    local corner = ctx.corner or function(obj, radius)
-        local c = Instance.new("UICorner")
-        c.CornerRadius = radius or UDim.new(0, 10)
-        c.Parent = obj
-        return c
-    end
-    local addStroke = ctx.addStroke or function(obj, color, thickness, transparency)
-        local s = Instance.new("UIStroke")
-        s.Color = color or Theme.BORDER_DIM
-        s.Thickness = thickness or 1
-        s.Transparency = transparency or 0.5
-        s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-        s.Parent = obj
-        return s
-    end
+    local Theme = ctx.Theme
+    local setFont, corner, addStroke, tw = ctx.setFont, ctx.corner, ctx.addStroke, ctx.tween
     local notify = ctx.notify or function() end
 
     local RS = game:GetService("ReplicatedStorage")
     local okCountry, Country = pcall(function()
-        return require(RS:WaitForChild("Content"):WaitForChild("Country"))
+        return require(RS:WaitForChild("Content", 5):WaitForChild("Country", 5))
     end)
     if not okCountry or type(Country) ~= "table" then
         Country = {}
@@ -616,8 +602,8 @@ local function buildUI(parent, ctx)
     for code, v in pairs(Country) do
         local item = {
             code = tostring(code),
-            name = tostring(v.CountryName or code),
-            icon = tostring(v.Icon or ""),
+            name = tostring(type(v) == "table" and v.CountryName or code),
+            icon = tostring(type(v) == "table" and v.Icon or ""),
         }
         countries[#countries + 1] = item
         byCode[item.code] = item
@@ -646,417 +632,300 @@ local function buildUI(parent, ctx)
 
     S.flagCode = detectFlagCode() or S.flagCode or "ID"
 
-    parent.BackgroundTransparency = 1
-    parent.ZIndex = 106
+    local left, right = ui.columns()
 
-    local header = Instance.new("TextLabel")
-    header.Text = "Indo Voice"
-    setFont(header, "Bold")
-    header.TextSize = 16
-    header.TextColor3 = Theme.TEXT_MAIN
-    header.Position = UDim2.fromOffset(0, 0)
-    header.Size = UDim2.new(1, 0, 0, 20)
-    header.BackgroundTransparency = 1
-    header.TextXAlignment = Enum.TextXAlignment.Left
-    header.ZIndex = 107
-    header.Parent = parent
+    -- ── kolom kiri: auto fish ───────────────────────────────────────────────
+    local fish = ui.section(left, "fish", "AUTO FISH")
+    local setRun = ui.toggle(fish, "Auto Fish · F8", S.running == true, function(v)
+        if v then
+            if type(S.start) == "function" then
+                S.start()
+                notify("Auto fish started", "play")
+            end
+        elseif type(S.stop) == "function" then
+            S.stop()
+            notify("Auto fish stopped", "circle-stop")
+        end
+    end)
+    local sState = ui.stat(fish, "activity", "Status")
+    local sCatch = ui.stat(fish, "fish", "Catches")
+    local sLast = ui.stat(fish, "sparkles", "Last Catch")
+    local sDetail = ui.stat(fish, "scale", "Weight")
+    local sSession = ui.stat(fish, "clock", "Session")
 
-    local sub = Instance.new("TextLabel")
-    sub.Text = "Auto Fish  ·  flag changer"
-    setFont(sub, "Medium")
-    sub.TextSize = 10
-    sub.TextColor3 = Theme.TEXT_MUTED
-    sub.Position = UDim2.fromOffset(0, 21)
-    sub.Size = UDim2.new(1, 0, 0, 14)
-    sub.BackgroundTransparency = 1
-    sub.TextXAlignment = Enum.TextXAlignment.Left
-    sub.ZIndex = 107
-    sub.Parent = parent
+    local tips = ui.section(left, "info", "NOTES")
+    local tipBlock = ui.block(tips, 52)
+    local tip = Instance.new("TextLabel")
+    tip.Text = "Stand still with the rod equipped. The loop casts, skips the drag phase and plays the bar minigame for you."
+    setFont(tip, "Medium")
+    tip.TextSize = 11
+    tip.TextColor3 = Theme.TEXT_MUTED
+    tip.TextWrapped = true
+    tip.TextXAlignment = Enum.TextXAlignment.Left
+    tip.TextYAlignment = Enum.TextYAlignment.Top
+    tip.Position = UDim2.fromOffset(8, 2)
+    tip.Size = UDim2.new(1, -16, 1, -4)
+    tip.BackgroundTransparency = 1
+    tip.ZIndex = 106
+    tip.Parent = tipBlock
 
-    local function makeCard(pos, size)
-        local card = Instance.new("Frame")
-        card.Position = pos
-        card.Size = size
-        card.BackgroundColor3 = Theme.CARD_BG
-        card.BackgroundTransparency = 0.08
-        card.ZIndex = 107
-        card.Parent = parent
-        corner(card, UDim.new(0, 10))
-        addStroke(card, Theme.BORDER_DIM, 1, 0.45)
-        return card
-    end
-
-    local left = makeCard(UDim2.fromOffset(0, 40), UDim2.new(0.54, -6, 1, -46))
-    local right = makeCard(UDim2.new(0.54, 6, 0, 40), UDim2.new(0.46, -6, 1, -46))
-
-    local leftTitle = Instance.new("TextLabel")
-    leftTitle.Text = "AUTO FISH"
-    setFont(leftTitle, "Bold")
-    leftTitle.TextSize = 11
-    leftTitle.TextColor3 = Theme.TEXT_MAIN
-    leftTitle.Position = UDim2.fromOffset(12, 10)
-    leftTitle.Size = UDim2.new(1, -24, 0, 16)
-    leftTitle.BackgroundTransparency = 1
-    leftTitle.TextXAlignment = Enum.TextXAlignment.Left
-    leftTitle.ZIndex = 108
-    leftTitle.Parent = left
-
-    local dot = Instance.new("Frame")
-    dot.Size = UDim2.fromOffset(7, 7)
-    dot.Position = UDim2.fromOffset(12, 34)
-    dot.BackgroundColor3 = Theme.ACCENT_RED
-    dot.BorderSizePixel = 0
-    dot.ZIndex = 108
-    dot.Parent = left
-    corner(dot, UDim.new(1, 0))
-
-    local stateLbl = Instance.new("TextLabel")
-    stateLbl.Text = "stopped"
-    setFont(stateLbl, "SemiBold")
-    stateLbl.TextSize = 10
-    stateLbl.TextColor3 = Theme.TEXT_MUTED
-    stateLbl.Position = UDim2.fromOffset(25, 29)
-    stateLbl.Size = UDim2.new(1, -37, 0, 16)
-    stateLbl.BackgroundTransparency = 1
-    stateLbl.TextXAlignment = Enum.TextXAlignment.Left
-    stateLbl.ZIndex = 108
-    stateLbl.Parent = left
-
-    local catchLbl = Instance.new("TextLabel")
-    catchLbl.Text = "CATCHES"
-    setFont(catchLbl, "SemiBold")
-    catchLbl.TextSize = 9
-    catchLbl.TextColor3 = Theme.TEXT_MUTED
-    catchLbl.Position = UDim2.fromOffset(12, 56)
-    catchLbl.Size = UDim2.new(1, -24, 0, 12)
-    catchLbl.BackgroundTransparency = 1
-    catchLbl.TextXAlignment = Enum.TextXAlignment.Left
-    catchLbl.ZIndex = 108
-    catchLbl.Parent = left
-
-    local catchVal = Instance.new("TextLabel")
-    catchVal.Text = "0"
-    setFont(catchVal, "Bold")
-    catchVal.TextSize = 24
-    catchVal.TextColor3 = Theme.NEON_GREEN
-    catchVal.Position = UDim2.fromOffset(12, 68)
-    catchVal.Size = UDim2.new(1, -24, 0, 30)
-    catchVal.BackgroundTransparency = 1
-    catchVal.TextXAlignment = Enum.TextXAlignment.Left
-    catchVal.ZIndex = 108
-    catchVal.Parent = left
-
-    local lastLbl = Instance.new("TextLabel")
-    lastLbl.Text = "LAST CATCH"
-    setFont(lastLbl, "SemiBold")
-    lastLbl.TextSize = 9
-    lastLbl.TextColor3 = Theme.TEXT_MUTED
-    lastLbl.Position = UDim2.fromOffset(12, 104)
-    lastLbl.Size = UDim2.new(1, -24, 0, 12)
-    lastLbl.BackgroundTransparency = 1
-    lastLbl.TextXAlignment = Enum.TextXAlignment.Left
-    lastLbl.ZIndex = 108
-    lastLbl.Parent = left
-
-    local lastVal = Instance.new("TextLabel")
-    lastVal.Text = "no catch yet"
-    setFont(lastVal, "Medium")
-    lastVal.TextSize = 11
-    lastVal.TextColor3 = Theme.TEXT_MAIN
-    lastVal.Position = UDim2.fromOffset(12, 118)
-    lastVal.Size = UDim2.new(1, -24, 0, 34)
-    lastVal.BackgroundTransparency = 1
-    lastVal.TextXAlignment = Enum.TextXAlignment.Left
-    lastVal.TextYAlignment = Enum.TextYAlignment.Top
-    lastVal.TextWrapped = true
-    lastVal.ZIndex = 108
-    lastVal.Parent = left
-
-    local sessionLbl = Instance.new("TextLabel")
-    sessionLbl.Text = "SESSION"
-    setFont(sessionLbl, "SemiBold")
-    sessionLbl.TextSize = 9
-    sessionLbl.TextColor3 = Theme.TEXT_MUTED
-    sessionLbl.Position = UDim2.fromOffset(12, 158)
-    sessionLbl.Size = UDim2.new(1, -24, 0, 12)
-    sessionLbl.BackgroundTransparency = 1
-    sessionLbl.TextXAlignment = Enum.TextXAlignment.Left
-    sessionLbl.ZIndex = 108
-    sessionLbl.Parent = left
-
-    local sessionVal = Instance.new("TextLabel")
-    sessionVal.Text = "--:--"
-    setFont(sessionVal, "SemiBold")
-    sessionVal.TextSize = 12
-    sessionVal.TextColor3 = Theme.TEXT_MAIN
-    sessionVal.Position = UDim2.fromOffset(12, 171)
-    sessionVal.Size = UDim2.new(1, -24, 0, 16)
-    sessionVal.BackgroundTransparency = 1
-    sessionVal.TextXAlignment = Enum.TextXAlignment.Left
-    sessionVal.ZIndex = 108
-    sessionVal.Parent = left
-
-    local toggle = Instance.new("TextButton")
-    toggle.Text = "START AUTO FISH"
-    setFont(toggle, "Bold")
-    toggle.TextSize = 11
-    toggle.TextColor3 = Color3.fromRGB(8, 14, 11)
-    toggle.BackgroundColor3 = Theme.NEON_GREEN
-    toggle.BackgroundTransparency = 0
-    toggle.AutoButtonColor = false
-    toggle.Position = UDim2.new(0, 12, 1, -46)
-    toggle.Size = UDim2.new(1, -24, 0, 34)
-    toggle.ZIndex = 109
-    toggle.Parent = left
-    corner(toggle, UDim.new(0, 8))
-
-    local flagTitle = Instance.new("TextLabel")
-    flagTitle.Text = "FLAG"
-    setFont(flagTitle, "Bold")
-    flagTitle.TextSize = 11
-    flagTitle.TextColor3 = Theme.TEXT_MAIN
-    flagTitle.Position = UDim2.fromOffset(12, 10)
-    flagTitle.Size = UDim2.new(1, -24, 0, 16)
-    flagTitle.BackgroundTransparency = 1
-    flagTitle.TextXAlignment = Enum.TextXAlignment.Left
-    flagTitle.ZIndex = 108
-    flagTitle.Parent = right
-
+    -- ── kolom kanan: flag changer ───────────────────────────────────────────
+    local flag = ui.section(right, "flag", "FLAG")
+    local cur = ui.block(flag, 30)
     local preview = Instance.new("ImageLabel")
-    preview.Size = UDim2.fromOffset(26, 18)
-    preview.Position = UDim2.fromOffset(12, 30)
+    preview.Size = UDim2.fromOffset(24, 16)
+    preview.Position = UDim2.new(0, 8, 0.5, -8)
     preview.BackgroundColor3 = Theme.WIN_BG
-    preview.BackgroundTransparency = 0.3
-    preview.BorderSizePixel = 0
+    preview.BackgroundTransparency = 0.2
     preview.ScaleType = Enum.ScaleType.Fit
-    preview.ZIndex = 108
-    preview.Parent = right
+    preview.ZIndex = 106
+    preview.Parent = cur
     corner(preview, UDim.new(0, 3))
+    local curName = Instance.new("TextLabel")
+    setFont(curName, "Bold")
+    curName.TextSize = 12
+    curName.TextColor3 = Theme.TEXT_MAIN
+    curName.Position = UDim2.fromOffset(40, 0)
+    curName.Size = UDim2.new(1, -90, 1, 0)
+    curName.BackgroundTransparency = 1
+    curName.TextXAlignment = Enum.TextXAlignment.Left
+    curName.TextTruncate = Enum.TextTruncate.AtEnd
+    curName.ZIndex = 106
+    curName.Parent = cur
+    local curCode = Instance.new("TextLabel")
+    setFont(curCode, "Bold")
+    curCode.TextSize = 10
+    curCode.TextColor3 = Theme.NEON_GREEN
+    curCode.BackgroundColor3 = Theme.WIN_BG
+    curCode.BackgroundTransparency = 0.1
+    curCode.Position = UDim2.new(1, -46, 0.5, -8)
+    curCode.Size = UDim2.fromOffset(38, 16)
+    curCode.ZIndex = 106
+    curCode.Parent = cur
+    corner(curCode, UDim.new(0, 5))
 
-    local currentLbl = Instance.new("TextLabel")
-    currentLbl.Text = "current"
-    setFont(currentLbl, "SemiBold")
-    currentLbl.TextSize = 10
-    currentLbl.TextColor3 = Theme.TEXT_MUTED
-    currentLbl.Position = UDim2.fromOffset(44, 30)
-    currentLbl.Size = UDim2.new(1, -56, 0, 18)
-    currentLbl.BackgroundTransparency = 1
-    currentLbl.TextXAlignment = Enum.TextXAlignment.Left
-    currentLbl.TextTruncate = Enum.TextTruncate.AtEnd
-    currentLbl.ZIndex = 108
-    currentLbl.Parent = right
-
+    local listBlock = ui.block(flag, #countries > 0 and 236 or 26)
+    local searchFrame = Instance.new("Frame")
+    searchFrame.Size = UDim2.new(1, -16, 0, 26)
+    searchFrame.Position = UDim2.fromOffset(8, 2)
+    searchFrame.BackgroundColor3 = Theme.WIN_BG
+    searchFrame.BackgroundTransparency = 0.1
+    searchFrame.ZIndex = 106
+    searchFrame.Parent = listBlock
+    corner(searchFrame, UDim.new(0, 7))
+    local searchStroke = addStroke(searchFrame, Theme.BORDER_DIM, 1, 0.5)
+    local sIco = Instance.new("ImageLabel")
+    sIco.Size = UDim2.fromOffset(12, 12)
+    sIco.Position = UDim2.new(0, 9, 0.5, -6)
+    sIco.BackgroundTransparency = 1
+    sIco.ImageColor3 = Theme.TEXT_MUTED
+    sIco.ZIndex = 107
+    sIco.Parent = searchFrame
+    if ctx.setLucide then ctx.setLucide(sIco, "search") end
     local search = Instance.new("TextBox")
     search.Text = ""
-    search.PlaceholderText = "search country"
+    search.PlaceholderText = "Search country..."
     search.PlaceholderColor3 = Theme.TEXT_MUTED
     search.ClearTextOnFocus = false
     setFont(search, "Medium")
-    search.TextSize = 10
+    search.TextSize = 11
     search.TextColor3 = Theme.TEXT_MAIN
-    search.BackgroundColor3 = Theme.WIN_BG
-    search.BackgroundTransparency = 0.15
-    search.Position = UDim2.fromOffset(12, 56)
-    search.Size = UDim2.new(1, -24, 0, 26)
-    search.ZIndex = 109
-    search.Parent = right
-    corner(search, UDim.new(0, 7))
-    addStroke(search, Theme.BORDER_DIM, 1, 0.5)
+    search.TextXAlignment = Enum.TextXAlignment.Left
+    search.BackgroundTransparency = 1
+    search.Position = UDim2.fromOffset(28, 0)
+    search.Size = UDim2.new(1, -36, 1, 0)
+    search.ZIndex = 107
+    search.Parent = searchFrame
+    search.Focused:Connect(function() tw(searchStroke, { Color = Theme.NEON_GREEN, Transparency = 0.3 }, 0.15) end)
+    search.FocusLost:Connect(function() tw(searchStroke, { Color = Theme.BORDER_DIM, Transparency = 0.5 }, 0.15) end)
 
     local list = Instance.new("ScrollingFrame")
-    list.Position = UDim2.fromOffset(12, 90)
-    list.Size = UDim2.new(1, -24, 1, -100)
+    list.Position = UDim2.fromOffset(8, 34)
+    list.Size = UDim2.new(1, -16, 1, -36)
     list.BackgroundTransparency = 1
     list.BorderSizePixel = 0
-    list.ScrollBarThickness = 3
-    list.ScrollBarImageColor3 = Theme.NEON_GREEN
+    list.ScrollBarThickness = 2
+    list.ScrollBarImageColor3 = Theme.CARD_ACTIVE
+    list.ScrollingDirection = Enum.ScrollingDirection.Y
+    list.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
     list.CanvasSize = UDim2.fromOffset(0, 0)
-    list.ZIndex = 108
-    list.Parent = right
+    list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    list.ZIndex = 106
+    list.Parent = listBlock
+    local ll = Instance.new("UIListLayout")
+    ll.Padding = UDim.new(0, 1)
+    ll.SortOrder = Enum.SortOrder.LayoutOrder
+    ll.Parent = list
 
+    -- baris negara: style item dropdown GrowHub (bar aksen + sorot saat terpilih)
     local rows = {}
+    local function paintRow(r)
+        local sel = r.code == S.flagCode
+        r.bar.Visible = sel
+        r.btn.BackgroundTransparency = sel and 0.55 or 1
+        r.name.TextColor3 = sel and Theme.NEON_GREEN or Theme.TEXT_MAIN
+        setFont(r.name, sel and "Bold" or "SemiBold")
+    end
 
     local function updatePreview()
         local item = byCode[S.flagCode]
-        if item then
-            preview.Image = item.icon
-            currentLbl.Text = item.name .. "  ·  " .. item.code
-            currentLbl.TextColor3 = Theme.TEXT_MAIN
-        else
-            preview.Image = ""
-            currentLbl.Text = tostring(S.flagCode or "unknown")
-            currentLbl.TextColor3 = Theme.TEXT_MUTED
-        end
+        preview.Image = item and item.icon or ""
+        curName.Text = item and item.name or "Unknown"
+        curName.TextColor3 = item and Theme.TEXT_MAIN or Theme.TEXT_MUTED
+        curCode.Text = item and item.code or "--"
+        for _, r in ipairs(rows) do paintRow(r) end
     end
-
-    local renderFlags
 
     local function applyFlag(code)
         if S.flagBusy then
+            notify("Wait a moment before changing again", "clock")
             return
         end
         local events = RS:FindFirstChild("GameRemoteEvents")
         local ev = events and events:FindFirstChild("CountryChangedEvent")
         if not ev then
-            notify("country remote not found", "alert-triangle")
+            notify("Country remote not found", "alert-triangle")
             return
         end
         S.flagBusy = true
-        local requested = code
-        local ok = pcall(function()
-            ev:FireServer(requested)
-        end)
+        local ok = pcall(function() ev:FireServer(code) end)
         if ok then
-            S.flagCode = requested
+            S.flagCode = code
             updatePreview()
-            if renderFlags then
-                renderFlags(search.Text)
-            end
-            local item = byCode[requested]
-            notify("Flag: " .. (item and item.name or requested), "flag")
+            local item = byCode[code]
+            notify("Flag: " .. (item and item.name or code), "flag")
             task.delay(1.5, function()
                 local actual = detectFlagCode()
-                if actual and actual ~= requested then
+                if actual and actual ~= code then
                     S.flagCode = actual
                     pcall(updatePreview)
-                    if renderFlags then pcall(renderFlags, search.Text) end
                     notify("Flag change was rate-limited, try again", "alert-triangle")
                 end
             end)
-            task.delay(2.1, function()
-                S.flagBusy = false
-            end)
+            task.delay(2.1, function() S.flagBusy = false end)
         else
-            notify("flag change failed", "alert-triangle")
-            task.delay(0.5, function()
-                S.flagBusy = false
-            end)
+            notify("Flag change failed", "alert-triangle")
+            task.delay(0.5, function() S.flagBusy = false end)
         end
     end
 
-    renderFlags = function(filter)
-        for i = #rows, 1, -1 do
-            pcall(function() rows[i]:Destroy() end)
-            rows[i] = nil
-        end
-        local q = string.lower(tostring(filter or ""))
-        local y = 0
-        for _, c in ipairs(countries) do
-            local hay = string.lower(c.name) .. " " .. string.lower(c.code)
-            if q == "" or string.find(hay, q, 1, true) then
-                local active = c.code == S.flagCode
-                local row = Instance.new("TextButton")
-                row.Text = ""
-                row.AutoButtonColor = false
-                row.BackgroundColor3 = Theme.CARD_BG
-                row.BackgroundTransparency = active and 0.35 or 1
-                row.Position = UDim2.fromOffset(0, y)
-                row.Size = UDim2.new(1, -4, 0, 26)
-                row.ZIndex = 108
-                row.Parent = list
-                corner(row, UDim.new(0, 6))
-                addStroke(row, active and Theme.NEON_GREEN or Theme.BORDER_DIM, 1, active and 0.25 or 1)
-
-                local icon = Instance.new("ImageLabel")
-                icon.Size = UDim2.fromOffset(18, 12)
-                icon.Position = UDim2.fromOffset(6, 7)
-                icon.BackgroundTransparency = 1
-                icon.Image = c.icon
-                icon.ScaleType = Enum.ScaleType.Fit
-                icon.ZIndex = 109
-                icon.Parent = row
-
-                local nameLbl = Instance.new("TextLabel")
-                nameLbl.Text = c.name
-                setFont(nameLbl, active and "SemiBold" or "Medium")
-                nameLbl.TextSize = 10
-                nameLbl.TextColor3 = active and Theme.NEON_GREEN or Theme.TEXT_MAIN
-                nameLbl.Position = UDim2.fromOffset(30, 4)
-                nameLbl.Size = UDim2.new(1, -64, 0, 18)
-                nameLbl.BackgroundTransparency = 1
-                nameLbl.TextXAlignment = Enum.TextXAlignment.Left
-                nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
-                nameLbl.ZIndex = 109
-                nameLbl.Parent = row
-
-                local codeLbl = Instance.new("TextLabel")
-                codeLbl.Text = c.code
-                setFont(codeLbl, "SemiBold")
-                codeLbl.TextSize = 9
-                codeLbl.TextColor3 = Theme.TEXT_MUTED
-                codeLbl.Position = UDim2.new(1, -36, 0, 4)
-                codeLbl.Size = UDim2.fromOffset(30, 18)
-                codeLbl.BackgroundTransparency = 1
-                codeLbl.TextXAlignment = Enum.TextXAlignment.Right
-                codeLbl.ZIndex = 109
-                codeLbl.Parent = row
-
-                row.MouseButton1Click:Connect(function()
-                    applyFlag(c.code)
-                end)
-
-                rows[#rows + 1] = row
-                y = y + 28
-            end
-        end
-        list.CanvasSize = UDim2.fromOffset(0, math.max(y, 1))
+    for i, c in ipairs(countries) do
+        local btn = Instance.new("TextButton")
+        btn.Text = ""
+        btn.AutoButtonColor = false
+        btn.BackgroundColor3 = Theme.CARD_HOVER
+        btn.BackgroundTransparency = 1
+        btn.Size = UDim2.new(1, 0, 0, 24)
+        btn.LayoutOrder = i
+        btn.ZIndex = 107
+        btn.Parent = list
+        corner(btn, UDim.new(0, 6))
+        local bar = Instance.new("Frame")
+        bar.Size = UDim2.fromOffset(2, 12)
+        bar.Position = UDim2.new(0, 3, 0.5, -6)
+        bar.BackgroundColor3 = Theme.NEON_GREEN
+        bar.BorderSizePixel = 0
+        bar.Visible = false
+        bar.ZIndex = 108
+        bar.Parent = btn
+        local icon = Instance.new("ImageLabel")
+        icon.Size = UDim2.fromOffset(18, 12)
+        icon.Position = UDim2.new(0, 10, 0.5, -6)
+        icon.BackgroundTransparency = 1
+        icon.Image = c.icon
+        icon.ScaleType = Enum.ScaleType.Fit
+        icon.ZIndex = 108
+        icon.Parent = btn
+        local name = Instance.new("TextLabel")
+        name.Text = c.name
+        setFont(name, "SemiBold")
+        name.TextSize = 11
+        name.Position = UDim2.fromOffset(34, 0)
+        name.Size = UDim2.new(1, -72, 1, 0)
+        name.BackgroundTransparency = 1
+        name.TextXAlignment = Enum.TextXAlignment.Left
+        name.TextTruncate = Enum.TextTruncate.AtEnd
+        name.ZIndex = 108
+        name.Parent = btn
+        local code = Instance.new("TextLabel")
+        code.Text = c.code
+        setFont(code, "Bold")
+        code.TextSize = 9
+        code.TextColor3 = Theme.TEXT_MUTED
+        code.Position = UDim2.new(1, -38, 0, 0)
+        code.Size = UDim2.new(0, 30, 1, 0)
+        code.BackgroundTransparency = 1
+        code.TextXAlignment = Enum.TextXAlignment.Right
+        code.ZIndex = 108
+        code.Parent = btn
+        local r = { code = c.code, hay = string.lower(c.name .. " " .. c.code), btn = btn, bar = bar, name = name }
+        rows[#rows + 1] = r
+        btn.MouseEnter:Connect(function() tw(btn, { BackgroundTransparency = 0.3 }, 0.1) end)
+        btn.MouseLeave:Connect(function() tw(btn, { BackgroundTransparency = (r.code == S.flagCode) and 0.55 or 1 }, 0.1) end)
+        btn.MouseButton1Click:Connect(function() applyFlag(c.code) end)
+    end
+    if #countries == 0 then
+        searchFrame.Visible = false
+        preview.Visible = false
+        curName.Position = UDim2.fromOffset(8, 0)
+        list.Position = UDim2.fromOffset(8, 0)
+        list.Size = UDim2.new(1, -16, 1, 0)
+        local e = Instance.new("TextLabel")
+        e.Text = "Flag list is only available in Indo Voice."
+        e.TextXAlignment = Enum.TextXAlignment.Left
+        setFont(e, "Medium")
+        e.TextSize = 11
+        e.TextColor3 = Theme.TEXT_MUTED
+        e.Size = UDim2.new(1, 0, 0, 24)
+        e.BackgroundTransparency = 1
+        e.ZIndex = 107
+        e.Parent = list
     end
 
-    local function refreshState()
+    -- filter tanpa rebuild (list ~200 negara)
+    search:GetPropertyChangedSignal("Text"):Connect(function()
+        local q = string.lower(search.Text)
+        for _, r in ipairs(rows) do
+            r.btn.Visible = q == "" or string.find(r.hay, q, 1, true) ~= nil
+        end
+    end)
+
+    local shownRun = S.running == true
+    local function refresh()
         local running = S.running == true
-        dot.BackgroundColor3 = running and Theme.NEON_GREEN or Theme.ACCENT_RED
-        stateLbl.Text = running and "running" or (S.loopRunning and "stopping..." or "stopped")
-        stateLbl.TextColor3 = running and Theme.NEON_GREEN or Theme.TEXT_MUTED
-        toggle.Text = running and "STOP AUTO FISH" or "START AUTO FISH"
-        toggle.BackgroundColor3 = running and Theme.ACCENT_RED or Theme.NEON_GREEN
-        toggle.TextColor3 = running and Color3.fromRGB(255, 244, 244) or Color3.fromRGB(8, 14, 11)
-    end
-
-    local function refreshStats()
-        catchVal.Text = tostring(S.catchCount or 0)
+        if running ~= shownRun then
+            shownRun = running
+            setRun(running, true) -- sync dari F8 tanpa memicu callback
+        end
+        if running then
+            sState("running", Theme.NEON_GREEN)
+        elseif S.loopRunning then
+            sState("stopping...", Theme.TEXT_MUTED)
+        else
+            sState("stopped", Theme.TEXT_MUTED)
+        end
+        sCatch(tostring(S.catchCount or 0), Theme.NEON_GREEN)
         local lc = S.lastCatch
         if type(lc) == "table" then
-            lastVal.Text = tostring(lc.name or "?") .. "  ·  " .. tostring(lc.rarity or "?")
-                .. "\n" .. string.format("%.2f", tonumber(lc.weight) or 0) .. " kg  ·  $" .. tostring(lc.price or 0)
+            sLast(tostring(lc.name or "?") .. " · " .. tostring(lc.rarity or "?"))
+            sDetail(string.format("%.2f kg · $%s", tonumber(lc.weight) or 0, tostring(lc.price or 0)))
         else
-            lastVal.Text = "no catch yet"
+            sLast("no catch yet", Theme.TEXT_MUTED)
+            sDetail("--", Theme.TEXT_MUTED)
         end
-        if S.running and (tonumber(S.startTime) or 0) > 0 then
+        if running and (tonumber(S.startTime) or 0) > 0 then
             local secs = math.max(0, math.floor(os.clock() - S.startTime))
-            sessionVal.Text = string.format("%02d:%02d", math.floor(secs / 60), secs % 60)
+            sSession(string.format("%02d:%02d", math.floor(secs / 60), secs % 60))
         else
-            sessionVal.Text = "--:--"
+            sSession("--:--", Theme.TEXT_MUTED)
         end
     end
 
-    toggle.MouseButton1Click:Connect(function()
-        if S.running then
-            S.stop()
-            notify("Auto fish stopped", "square")
-        else
-            if type(S.start) == "function" then
-                S.start()
-                notify("Auto fish started", "play")
-            else
-                notify("start function missing", "alert-triangle")
-            end
-        end
-        refreshState()
-    end)
-
-    search:GetPropertyChangedSignal("Text"):Connect(function()
-        renderFlags(search.Text)
-    end)
-
     updatePreview()
-    renderFlags("")
-    refreshState()
-    refreshStats()
-
+    refresh()
     task.spawn(function()
         while parent.Parent do
-            pcall(refreshState)
-            pcall(refreshStats)
+            pcall(refresh)
             task.wait(0.5)
         end
     end)
@@ -1065,7 +934,7 @@ end
 getgenv().GrowGame = {
     Id = "indovoice_autofish",
     Name = "Indo Voice",
-    Version = "1.1.2",
+    Version = "1.2.0",
     UI = buildUI,
     Stop = function()
         local st = getgenv()._fishAuto
