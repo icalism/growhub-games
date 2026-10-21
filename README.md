@@ -1,18 +1,16 @@
-﻿# GrowHub Games
+# GrowHub Games
 
 Remote game scripts for GrowHub. One file per game, listed in `manifest.json`.
-GrowHub only knows this manifest â€” adding a game never requires touching GrowHub again.
+GrowHub only knows this manifest — adding a game never requires touching GrowHub again.
 
 ## Repo layout
 
 ```
 growhub-games/
-â”œâ”€â”€ manifest.json
-â”œâ”€â”€ indovoice/
-â”‚   â””â”€â”€ auto_fish.lua
-â”œâ”€â”€ growgarden/
-â”‚   â””â”€â”€ auto_farm.lua
-â””â”€â”€ README.md
+├── manifest.json
+├── indovoice/
+│   └── auto_fish.lua
+└── README.md
 ```
 
 ## manifest.json
@@ -61,7 +59,7 @@ getgenv().GrowGame = {
 ```
 
 The hub calls `Stop()` on the previous game before loading another one.
-The script should start itself on load â€” the hub does not call `Start()`.
+The script should start itself on load — the hub does not call `Start()`.
 
 Minimum template:
 
@@ -82,24 +80,22 @@ getgenv().GrowGame = {
 }
 ```
 
-## Publishing on GitHub
+## Hosting
 
-1. Create a **public** repo, e.g. `growhub-games`.
-2. Upload `manifest.json` and the game folders.
-3. Raw base becomes:
+This repo is live at `icalism/growhub-games` (public). Raw base:
 
 ```
 https://raw.githubusercontent.com/icalism/growhub-games/main/
 ```
 
-4. Open in a browser to verify:
+GrowHub's `Games.base` already points there. Verify:
 
 ```
 https://raw.githubusercontent.com/icalism/growhub-games/main/manifest.json
 https://raw.githubusercontent.com/icalism/growhub-games/main/indovoice/auto_fish.lua
 ```
 
-5. Put that base into `Games.base` in GrowHub's Games tab.
+If you fork or rename the repo, change `Games.base` in GrowHub's Games tab.
 
 ## Updating a script
 
@@ -111,5 +107,4 @@ https://raw.githubusercontent.com/icalism/growhub-games/main/indovoice/auto_fish
 
 1. Add `newgame/feature.lua` following the contract.
 2. Add one entry to `manifest.json`.
-3. Press **REFRESH** in GrowHub. Done â€” no GrowHub edit.
-
+3. Press **REFRESH** in GrowHub. Done — no GrowHub edit.
