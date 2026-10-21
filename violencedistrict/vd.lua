@@ -633,7 +633,7 @@ task.spawn(function()
                 local hum = getHum()
                 local ok = char and hum and hum.Health > hum.MaxHealth * 0.5 and not char:GetAttribute("IsHooked") and not char:GetAttribute("IsCarried") and not LP:GetAttribute("IsDead")
                 if ok and not isBusy() and not killerNear(14) then
-                    local point = nearestTag("UnhookPoint", 7)
+                    local point = nearestTag("HookPoint", 7)
                     if point and tick() - (S.lastUnhook or 0) > 3.2 then
                         S.lastUnhook = tick()
                         UnHookEvent:FireServer(point)
@@ -664,7 +664,7 @@ task.spawn(function()
     while alive and S.generation == GEN do
         pcall(function()
             if F.autoEscape and LeverEvent then
-                local point = nearestTag("ExitPoint", 9)
+                local point = nearestTag("Exit", 9)
                 if point ~= S.exitPoint then
                     stopExit()
                     if point then
@@ -1071,7 +1071,7 @@ end
 getgenv().GrowGame = {
     Id = "violencedistrict",
     Name = "Violence District",
-    Version = "1.4.0",
+    Version = "1.4.1",
     UI = buildUI,
     Stop = function()
         pcall(shutdown)
