@@ -252,6 +252,18 @@ local function checkMode()
     return m
 end
 
+-- VIM for simulating Space press (perfect mode visual)
+local VIM = game:GetService("VirtualInputManager")
+
+-- get skillcheck UI refs (cached once)
+local function getSkillCheckUI()
+    local pg = LP:FindFirstChild("PlayerGui")
+    local scg = pg and pg:FindFirstChild("SkillCheckPromptGui")
+    local check = scg and scg:FindFirstChild("Check")
+    if not check then return nil, nil, nil end
+    return check, check:FindFirstChild("Line"), check:FindFirstChild("Goal")
+end
+
 if GenSkillCheckEvent and GenSkillCheckResult then
     mkConn(GenSkillCheckEvent.OnClientEvent:Connect(function(token, genPoint)
         if not alive then
@@ -261,36 +273,83 @@ if GenSkillCheckEvent and GenSkillCheckResult then
         if mode == "off" then
             return
         end
-        local val = 1
         if mode == "instant" then
-            val = tonumber(F.instantValue) or 100
-        end
-        local gen = genPoint and genPoint.Parent
-        local before = gen and gen:GetAttribute("RepairProgress")
-        pcall(function()
-            GenSkillCheckResult:FireServer("success", val, token, genPoint)
-        end)
-        if mode == "instant" and gen then
-            S.instantTries = (S.instantTries or 0) + 1
-            if S.instantTries <= 10 then
-                task.delay(1.2, function()
-                    pcall(function()
-                        local after = gen:GetAttribute("RepairProgress")
-                        log(string.format("instant: fired %s, progress %s -> %s", tostring(val), tostring(before), tostring(after)))
-                    end)
+            -- instant: fire result directly, skip visual
+            task.delay(0.15, function()
+                if not alive then return end
+                pcall(function()
+                    GenSkillCheckResult:FireServer("success", 1, token, genPoint)
                 end)
-            end
+            end)
+        else
+            -- perfect: wait for needle to reach perfect zone, then press Space
+            -- so the game's own handler stops the needle visually at the right spot
+            task.spawn(function()
+                local check, line, goal = getSkillCheckUI()
+                if not check or not line or not goal then
+                    task.wait(0.6)
+                    pcall(function() GenSkillCheckResult:FireServer("success", 1, token, genPoint) end)
+                    return
+                end
+                -- wait for game to show the check (0.5s internal delay)
+                local waited = 0
+                while waited < 1.5 and not check.Visible do
+                    task.wait(0.03)
+                    waited = waited + 0.03
+                end
+                if not check.Visible or not alive then return end
+                -- poll until needle enters perfect zone
+                -- perfect zone: [102 + Goal.Rotation, 116 + Goal.Rotation]
+                local RunSvc = game:GetService("RunService")
+                local done = false
+                local conn
+                conn = RunSvc.Heartbeat:Connect(function()
+                    if done or not alive then
+                        if conn then conn:Disconnect() end
+                        return
+                    end
+                    local lr = line.Rotation
+                    local gr = goal.Rotation
+                    if lr >= 102 + gr and lr <= 116 + gr then
+                        done = true
+                        conn:Disconnect()
+                        pcall(function()
+                            VIM:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+                            task.delay(0.05, function()
+                                VIM:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+                            end)
+                        end)
+                    end
+                end)
+                -- safety timeout
+                task.delay(2.5, function()
+                    if not done and alive then
+                        done = true
+                        if conn then pcall(function() conn:Disconnect() end) end
+                        pcall(function() GenSkillCheckResult:FireServer("success", 1, token, genPoint) end)
+                    end
+                end)
+            end)
         end
     end))
 end
 
 if HealSkillCheckEvent and HealSkillCheckResult then
     mkConn(HealSkillCheckEvent.OnClientEvent:Connect(function(token)
-        if not alive or checkMode() == "off" then
+        if not alive then
             return
         end
-        pcall(function()
-            HealSkillCheckResult:FireServer("success", 1, token)
+        local mode = checkMode()
+        if mode == "off" then
+            return
+        end
+        task.delay(mode == "instant" and 0.15 or 0.45, function()
+            if not alive then
+                return
+            end
+            pcall(function()
+                HealSkillCheckResult:FireServer("success", 1, token)
+            end)
         end)
     end))
 end
@@ -302,6 +361,36 @@ end))
 
 -- repair state
 
+local function getProgressFrame()
+    local pg = LP:FindFirstChild("PlayerGui")
+    local ppg = pg and pg:FindFirstChild("ProgressPromptGui")
+    return ppg and ppg:FindFirstChild("Frame")
+end
+
+local function startRepairUI()
+    local char = getChar()
+    local ci = char and char:FindFirstChild("CheckInterractable")
+    if ci then
+        pcall(function() ci:SetAttribute("isRepairing", true) end)
+    end
+    local f = getProgressFrame()
+    if f then
+        pcall(function() f.Visible = true end)
+    end
+end
+
+local function stopRepairUI()
+    local char = getChar()
+    local ci = char and char:FindFirstChild("CheckInterractable")
+    if ci then
+        pcall(function() ci:SetAttribute("isRepairing", false) end)
+    end
+    local f = getProgressFrame()
+    if f then
+        pcall(function() f.Visible = false end)
+    end
+end
+
 local function stopRepair()
     if S.repairPoint and RepairEvent then
         pcall(function()
@@ -309,12 +398,9 @@ local function stopRepair()
         end)
     end
     S.repairPoint = nil
-    local root = getRoot()
-    if root then
-        pcall(function()
-            root.Anchored = false
-        end)
-    end
+    S.repairGen = nil
+    S.repairStopAt = tick()
+    stopRepairUI()
 end
 
 -- heal state
@@ -378,12 +464,49 @@ task.spawn(function()
     end
 end)
 
+-- repair targeting: lock onto one generator. chasing individual GeneratorPoint
+-- identity made sibling points on the same generator flip-flop, and the churn
+-- made the server drop the repair (progress froze, PlayersRepairingCount back to 0).
+
+local function genUsable(gen)
+    if not gen or not gen.Parent then
+        return false
+    end
+    if gen:GetAttribute("Completed") or gen:GetAttribute("Regressing") or gen:GetAttribute("ProgressPaused") then
+        return false
+    end
+    return true
+end
+
+local function pickRepairPoint(maxDist)
+    local root = getRoot()
+    if not root then
+        return nil
+    end
+    local best, bestScore = nil, -math.huge
+    local seen = {}
+    for _, inst in ipairs(CollectionService:GetTagged("GeneratorPoint")) do
+        local gen = inst:IsA("BasePart") and inst.Parent
+        if gen and not seen[gen] and genUsable(gen) and not CollectionService:HasTag(gen, "Blocked") then
+            local d = (inst.Position - root.Position).Magnitude
+            if d <= maxDist then
+                seen[gen] = true
+                local score = (tonumber(gen:GetAttribute("RepairProgress")) or 0) * 0.5 - d
+                if score > bestScore then
+                    best, bestScore = inst, score
+                end
+            end
+        end
+    end
+    return best
+end
+
 -- engine: repair loop
 
 task.spawn(function()
     while alive and S.generation == GEN do
         pcall(function()
-            if F.autoRepair and RepairEvent then
+            if (F.autoRepair or checkMode() == "instant") and RepairEvent then
                 local char = getChar()
                 local hum = getHum()
                 local ok = char and hum and hum.Health > hum.MaxHealth * 0.5 and not char:GetAttribute("IsHooked") and not char:GetAttribute("IsCarried") and not LP:GetAttribute("IsDead")
@@ -394,17 +517,29 @@ task.spawn(function()
                     if moving then
                         stopRepair()
                     else
-                        local point = nearestTag("GeneratorPoint", 15)
-                        if point ~= S.repairPoint then
-                            stopRepair()
+                        local root = getRoot()
+                        local rp = S.repairPoint
+                        if rp then
+                            local stale = not rp.Parent or not genUsable(rp.Parent)
+                                or (root and (rp.Position - root.Position).Magnitude > 16)
+                            if stale then
+                                stopRepair()
+                                rp = nil
+                            end
+                        end
+                        if not rp and (tick() - (S.repairStopAt or 0) > 0.4) then
+                            local point = pickRepairPoint(15)
                             if point then
                                 S.repairPoint = point
+                                S.repairGen = point.Parent
                                 RepairEvent:FireServer(point, true)
-                                local root = getRoot()
-                                if root then
-                                    root.Anchored = true
-                                end
+                                startRepairUI()
                             end
+                        end
+                        -- keep native UI flags alive while repairing (game resets
+                        -- isRepairing after each skillcheck result)
+                        if S.repairPoint then
+                            startRepairUI()
                         end
                     end
                 else
@@ -676,6 +811,7 @@ local function fbRestore()
 end
 
 table.insert(S.teardowns, fbRestore)
+table.insert(S.teardowns, stopRepairUI)
 
 task.spawn(function()
     while alive and S.generation == GEN do
@@ -797,7 +933,8 @@ task.spawn(function()
             info.gens = cnt > 0 and string.format("%.0f%% · %d gens, %d active", sum / cnt, cnt, repairing) or "none"
             local states = {}
             if S.repairPoint then
-                states[#states + 1] = "repairing"
+                local pr = S.repairGen and tonumber(S.repairGen:GetAttribute("RepairProgress"))
+                states[#states + 1] = pr and string.format("repairing %.0f%%", pr) or "repairing"
             end
             if S.healPoint then
                 states[#states + 1] = "healing"
@@ -934,7 +1071,7 @@ end
 getgenv().GrowGame = {
     Id = "violencedistrict",
     Name = "Violence District",
-    Version = "1.1.0",
+    Version = "1.4.0",
     UI = buildUI,
     Stop = function()
         pcall(shutdown)
